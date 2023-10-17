@@ -18,17 +18,19 @@ Random.seed!(3)
 
 cosmo = get_cosmology(h=0.7f0, OmegaM=0.25f0)
 model = CIB_Planck2013{Float32}(nside=4096)
+flux_cut_143::Float32 = 7 * 1f-9
+flux_cut_ref_freq = 143f9
 
 ## Write one chunk to disk
-function write_freq(
-    output_dir, model, cosmo,
-    pos, mass, freqs)
+function gen_realization(
+    output_dir, model::CIB_Planck2013{T}, cosmo,
+    pos, mass, freqs) where T
     # Allocate some arrays and fill them up for centrals and satellites
     @time sources = generate_sources(model, cosmo, pos, mass);
 
     # Deposit the sources into maps
-    fluxes_cen = Array{Float32, 1}(undef, sources.N_cen)
-    fluxes_sat = Array{Float32, 1}(undef, sources.N_sat)
+    fluxes_cen = Array{T, 1}(undef, sources.N_cen)
+    fluxes_sat = Array{T, 1}(undef, sources.N_sat)
     m_hp = HealpixMap{Float64,RingOrder}(model.nside)
 
     shape, wcs = fullsky_geometry(deg2rad(0.5 / 60))
@@ -46,21 +48,29 @@ function write_freq(
         write(file, "phi", sources.phi_sat)
     end
 
+    # generate sources at reference frequency
+    XGPaint.paint!(m_hp, flux_cut_ref_freq, model, sources, fluxes_cen, fluxes_sat)
+    flux_cut_cen = fluxes_cen .> flux_cut_143
+    flux_cut_sat = fluxes_sat .> flux_cut_143
+
     # loop over all frequencies and paint sources to appropriate freq map
     @time begin
         for freq in freqs
 
-            XGPaint.paint!(m_hp, parse(Float32, freq) * 1.0f9, model, sources,
-                fluxes_cen, fluxes_sat)
-            XGPaint.paint!(m_car, parse(Float32, freq) * 1.0f9, model, sources,
-                fluxes_cen, fluxes_sat)
+            fill_fluxes!(nu_obs, model, sources, fluxes_cen, fluxes_sat)
+            fluxes_cen[flux_cut_cen] .= zero(T)
+            fluxes_sat[flux_cut_sat] .= zero(T)
+            XGPaint.paint!(m_hp, parse(T, freq) * 1.0f9, model, sources,
+                fluxes_cen, fluxes_sat; fill_fluxes=false)
+            XGPaint.paint!(m_car, parse(T, freq) * 1.0f9, model, sources,
+                fluxes_cen, fluxes_sat; fill_fluxes=false)
 
             # save sources with mass, redshift, angles
             h5open(joinpath(output_dir, "sources/centrals_flux_$(freq).h5"), "w") do file
-                write(file, "flux", fluxes_cen)
+                write(file, "flux", fluxes_cen[flux_cut_cen .== false])
             end
             h5open(joinpath(output_dir, "sources/satellites_flux_$(freq).h5"), "w") do file
-                write(file, "flux", fluxes_sat)
+                write(file, "flux", fluxes_sat[flux_cut_sat .== false])
             end
 
             filename_hp = joinpath(output_dir, "cib_$(freq)_hp.fits")
@@ -69,7 +79,6 @@ function write_freq(
             write_map(filename_car, m_car)
         end
     end
-
 end
 
 freqs = [
@@ -80,8 +89,8 @@ freqs = [
     "857", "906", "994", "1080"
 ]
 # freqs = ["143"]
-scratch_dir = joinpath(ENV["SCRATCH"], "cib3")
+scratch_dir = joinpath(ENV["SCRATCH"], "cib_flux_cut")
 println("SCRATCH: ", scratch_dir)
 mkpath(scratch_dir)
 mkpath(joinpath(scratch_dir, "sources"))
-write_freq(scratch_dir, model, cosmo, halo_pos, halo_mass, freqs)
+gen_realization(scratch_dir, model, cosmo, halo_pos, halo_mass, freqs)
