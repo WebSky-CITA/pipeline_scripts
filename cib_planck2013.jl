@@ -56,13 +56,14 @@ function gen_realization(
     # loop over all frequencies and paint sources to appropriate freq map
     @time begin
         for freq in freqs
-
+            
+            nu_obs = parse(T, freq) * 1.0f9
             fill_fluxes!(nu_obs, model, sources, fluxes_cen, fluxes_sat)
             fluxes_cen[flux_cut_cen] .= zero(T)
             fluxes_sat[flux_cut_sat] .= zero(T)
-            XGPaint.paint!(m_hp, parse(T, freq) * 1.0f9, model, sources,
+            XGPaint.paint!(m_hp, nu_obs, model, sources,
                 fluxes_cen, fluxes_sat; fill_fluxes=false)
-            XGPaint.paint!(m_car, parse(T, freq) * 1.0f9, model, sources,
+            XGPaint.paint!(m_car, nu_obs, model, sources,
                 fluxes_cen, fluxes_sat; fill_fluxes=false)
 
             # save sources with mass, redshift, angles
