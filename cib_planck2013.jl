@@ -20,8 +20,8 @@ cosmo = get_cosmology(h=0.7f0, OmegaM=0.25f0)
 model = CIB_Planck2013{Float32}(nside=4096)
 
 ## Write one chunk to disk
-function write_chunk(
-    output_dir, chunk_index, model, cosmo,
+function write_freq(
+    output_dir, model, cosmo,
     pos, mass, freqs)
     # Allocate some arrays and fill them up for centrals and satellites
     @time sources = generate_sources(model, cosmo, pos, mass);
@@ -35,12 +35,12 @@ function write_chunk(
     m_car = Enmap(zeros(Float64, shape), wcs)
 
 
-    h5open(joinpath(output_dir, "sources/cen_chunk$(chunk_index).h5"), "w") do file
+    h5open(joinpath(output_dir, "sources/centrals.h5"), "w") do file
         write(file, "redshift", sources.redshift_cen)
         write(file, "theta", sources.theta_cen)
         write(file, "phi", sources.phi_cen)
     end
-    h5open(joinpath(output_dir, "sources/sat_chunk$(chunk_index).h5"), "w") do file
+    h5open(joinpath(output_dir, "sources/satellites.h5"), "w") do file
         write(file, "redshift", sources.redshift_sat)
         write(file, "theta", sources.theta_sat)
         write(file, "phi", sources.phi_sat)
@@ -56,49 +56,21 @@ function write_chunk(
                 fluxes_cen, fluxes_sat)
 
             # save sources with mass, redshift, angles
-            h5open(joinpath(output_dir, "sources/cen_chunk$(chunk_index)_flux_$(freq).h5"), "w") do file
+            h5open(joinpath(output_dir, "sources/centrals_flux_$(freq).h5"), "w") do file
                 write(file, "flux", fluxes_cen)
             end
-            h5open(joinpath(output_dir, "sources/sat_chunk$(chunk_index)_flux_$(freq).h5"), "w") do file
+            h5open(joinpath(output_dir, "sources/satellites_flux_$(freq).h5"), "w") do file
                 write(file, "flux", fluxes_sat)
             end
 
             filename_hp = joinpath(output_dir, "cib_$(freq)_hp.fits")
             filename_car = joinpath(output_dir, "cib_$(freq)_car.fits")
-
-            if chunk_index > 1
-                m_hp_0 = Healpix.readMapFromFITS(filename_hp, 1, Float32)
-                m_hp.pixels = m_hp.pixels + m_hp_0.pixels
-            end
             Healpix.saveToFITS(m_hp, "!$(filename_hp)", typechar="D")
-
-            if chunk_index > 1
-                m_car_0 = read_map(filename_car)
-                m_car .+= m_car_0
-            end
             write_map(filename_car, m_car)
         end
     end
 
 end
-
-##
-function run_all_chunks(output_dir, halo_pos, halo_mass, freqs; N_chunks=2)
-    # provide views into halo positions and masses for chunks of the halos
-    N_halos = size(halo_mass, 1)
-    chunksize = trunc(Integer, N_halos / N_chunks + 1)
-    chunks = chunk(N_halos, chunksize)
-    for chunk_index in eachindex(chunks)
-        left_ind, right_ind = chunks[chunk_index]
-        println("Chunk ", chunk_index, "/", length(chunks),
-            " ", left_ind, " ", right_ind)
-        pos = @view halo_pos[:, left_ind:right_ind]
-        mass = @view halo_mass[left_ind:right_ind]
-        write_chunk(output_dir, chunk_index, model, cosmo,
-            pos, mass, freqs)
-    end
-end
-## compute on all chunks, on all halos
 
 freqs = [
     "18.7", "21.6", "24.5", "27.3", "30.0", "35.9", "41.7", "44.0", "47.4",
@@ -108,10 +80,8 @@ freqs = [
     "857", "906", "994", "1080"
 ]
 # freqs = ["143"]
-scratch_dir = joinpath(ENV["SCRATCH"], "cib_sources")
+scratch_dir = joinpath(ENV["SCRATCH"], "cib3")
 println("SCRATCH: ", scratch_dir)
 mkpath(scratch_dir)
 mkpath(joinpath(scratch_dir, "sources"))
-run_all_chunks(scratch_dir, halo_pos, halo_mass, freqs)
-
-##
+write_freq(scratch_dir, model, cosmo, halo_pos, halo_mass, freqs)
