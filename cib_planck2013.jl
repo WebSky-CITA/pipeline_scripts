@@ -58,21 +58,22 @@ function gen_realization(
         for freq in freqs
             
             nu_obs = parse(T, freq) * 1.0f9
-            fill_fluxes!(nu_obs, model, sources, fluxes_cen, fluxes_sat)
+            XGPaint.fill_fluxes!(nu_obs, model, sources, fluxes_cen, fluxes_sat)
+
+            # save sources with mass, redshift, angles
+            h5open(joinpath(output_dir, "sources/centrals_flux_$(freq).h5"), "w") do file
+                write(file, "flux", fluxes_cen[flux_cut_cen])
+            end
+            h5open(joinpath(output_dir, "sources/satellites_flux_$(freq).h5"), "w") do file
+                write(file, "flux", fluxes_sat[flux_cut_sat])
+            end
+            
             fluxes_cen[flux_cut_cen] .= zero(T)
             fluxes_sat[flux_cut_sat] .= zero(T)
             XGPaint.paint!(m_hp, nu_obs, model, sources,
                 fluxes_cen, fluxes_sat; fill_fluxes=false)
             XGPaint.paint!(m_car, nu_obs, model, sources,
                 fluxes_cen, fluxes_sat; fill_fluxes=false)
-
-            # save sources with mass, redshift, angles
-            h5open(joinpath(output_dir, "sources/centrals_flux_$(freq).h5"), "w") do file
-                write(file, "flux", fluxes_cen[flux_cut_cen .== false])
-            end
-            h5open(joinpath(output_dir, "sources/satellites_flux_$(freq).h5"), "w") do file
-                write(file, "flux", fluxes_sat[flux_cut_sat .== false])
-            end
 
             filename_hp = joinpath(output_dir, "cib_$(freq)_hp.fits")
             filename_car = joinpath(output_dir, "cib_$(freq)_car.fits")
