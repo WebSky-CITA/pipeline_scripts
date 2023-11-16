@@ -26,10 +26,17 @@ for (root, dirs, files) in walkdir(cat_dir)
 
         sources = convert(Dict{String, Vector{Float64}}, read(h5open(filename, "r")))
         fluxes = sources["flux"]
+
+        outdir = joinpath(map_dir, "flux_cut_7mJy")
+        mkpath(outdir)
+        mkpath(joinpath(outdir, "sources"))
+        h5open(joinpath(outdir, "sources", "flux_$(freq).h5"), "w") do file
+            write(file, "flux", fluxes[flux_cut_mask])
+        end
         fluxes[flux_cut_mask] .= 0
         XGPaint.catalog2map!(m, sources["flux"], sources["theta"], sources["phi"], pixsizes)
-        map_path = joinpath(map_dir, "flux_cut_7mJy", "map_radio_0.5arcmin_f$(freq).fits")
-        mkpath(joinpath(map_dir, "flux_cut_7mJy"))
+        map_path = joinpath(outdir, "map_radio_0.5arcmin_f$(freq).fits")
+        
         write_map("!$(map_path)", m)
     end
 end
