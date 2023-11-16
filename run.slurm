@@ -6,4 +6,4 @@
 #SBATCH --cpus-per-task=128
 #SBATCH --constraint=cpu
 
-srun julia --project -t 128 cib_planck2013.jl 
+srun julia --project -t 128 $1
